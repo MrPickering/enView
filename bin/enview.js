@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { scanDirectories } from '../src/scanner.js';
+import { scanDirectories, addGitignoreEntry } from '../src/scanner.js';
 import {
   printScanResults,
   printAuditResults,
   printKeysResults,
   printDriftResults,
+  printFixResults,
 } from '../src/reporter.js';
 
 const program = new Command();
@@ -66,6 +67,39 @@ program
   .action((dirs, opts) => {
     const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
     printDriftResults(projects, opts);
+  });
+
+program
+  .command('fix')
+  .description('Add missing .gitignore entries and show encryption commands')
+  .argument('[dirs...]', 'Directories to scan', ['.'])
+  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .option('--dry-run', 'Show what would be fixed without making changes')
+  .action((dirs, opts) => {
+    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const fixActions = { gitignoreAdded: [], alreadyIgnored: [] };
+
+    for (const project of projects) {
+      for (const f of project.files) {
+        if (!f.inGitRepo) continue;
+        if (f.gitIgnored) {
+          fixActions.alreadyIgnored.push({ project: project.name, fileName: f.fileName });
+          continue;
+        }
+        if (opts.dryRun) {
+          fixActions.gitignoreAdded.push({ project: project.name, fileName: f.fileName, dryRun: true });
+        } else {
+          const added = addGitignoreEntry(project.path, f.fileName);
+          if (added) {
+            fixActions.gitignoreAdded.push({ project: project.name, fileName: f.fileName });
+          } else {
+            fixActions.alreadyIgnored.push({ project: project.name, fileName: f.fileName });
+          }
+        }
+      }
+    }
+
+    printFixResults(projects, fixActions);
   });
 
 program.parse();

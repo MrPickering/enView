@@ -268,6 +268,19 @@ function getGitInfo(filePath, dir) {
   return result;
 }
 
+export function addGitignoreEntry(projectPath, fileName) {
+  const gitignorePath = path.join(projectPath, '.gitignore');
+  let content = '';
+  if (fs.existsSync(gitignorePath)) {
+    content = fs.readFileSync(gitignorePath, 'utf-8');
+    const lines = content.split('\n').map(l => l.trim());
+    if (lines.includes(fileName)) return false; // already present
+  }
+  const newline = content && !content.endsWith('\n') ? '\n' : '';
+  fs.appendFileSync(gitignorePath, `${newline}${fileName}\n`);
+  return true;
+}
+
 function groupByProject(files) {
   const projects = new Map();
   for (const file of files) {

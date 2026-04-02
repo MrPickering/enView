@@ -203,7 +203,25 @@ export function printAuditResults(projects, opts = {}) {
   if (criticalCount > 0) {
     console.log(chalk.red.bold(`\n  ${ICONS.warning}  ${criticalCount} critical issue(s) require immediate attention\n`));
   }
-  console.log();
+
+  const unencryptedProjects = projects.filter(p =>
+    p.files.some(f => f.encryption.type === 'none' && f.keys.length > 0)
+  );
+  if (unencryptedProjects.length > 0) {
+    const encCount = projects.length - unencryptedProjects.length;
+    if (encCount > 0) {
+      console.log(chalk.green(`  ${ICONS.locked} ${encCount}/${projects.length} projects fully encrypted\n`));
+    }
+    console.log(chalk.cyan(`  ${ICONS.locked} Encrypt your .env files with dotenvx: ${chalk.underline('https://dotenvx.com')}`));
+    for (const p of unencryptedProjects) {
+      console.log(chalk.dim(`    $ cd ${p.path} && npx @dotenvx/dotenvx encrypt`));
+    }
+    console.log();
+    console.log(chalk.dim(`  Or run ${chalk.white('enview fix')} to add missing .gitignore entries and see per-project commands.`));
+    console.log();
+  } else if (projects.length > 0) {
+    console.log(chalk.green(`\n  ${ICONS.locked} ${projects.length}/${projects.length} projects fully encrypted\n`));
+  }
 }
 
 // ─── keys command ────────────────────────────────────────
@@ -299,6 +317,45 @@ export function printDriftResults(projects, opts = {}) {
 
   if (!hasDrift) {
     console.log(chalk.green('  No drift detected — all environments have consistent keys.\n'));
+  }
+}
+
+// ─── fix command ────────────────────────────────────────
+
+export function printFixResults(projects, fixActions) {
+  console.log(chalk.bold(`\n🔧  enview fix — remediation\n`));
+
+  if (fixActions.gitignoreAdded.length > 0) {
+    console.log(chalk.green.bold('  .gitignore entries added:\n'));
+    for (const entry of fixActions.gitignoreAdded) {
+      console.log(chalk.green(`    ${ICONS.check} ${entry.project} — added ${entry.fileName} to .gitignore`));
+    }
+    console.log();
+  }
+
+  if (fixActions.alreadyIgnored.length > 0) {
+    console.log(chalk.dim(`  Already gitignored: ${fixActions.alreadyIgnored.map(e => e.project + '/' + e.fileName).join(', ')}\n`));
+  }
+
+  const unencryptedProjects = projects.filter(p =>
+    p.files.some(f => f.encryption.type === 'none' && f.keys.length > 0)
+  );
+
+  if (unencryptedProjects.length > 0) {
+    console.log(chalk.cyan.bold('  Encrypt your .env files:\n'));
+    console.log(chalk.dim('    Install dotenvx once:'));
+    console.log(chalk.white('    $ npm install -g @dotenvx/dotenvx\n'));
+    console.log(chalk.dim('    Then encrypt each project:'));
+    for (const p of unencryptedProjects) {
+      console.log(chalk.white(`    $ cd ${p.path} && dotenvx encrypt`));
+    }
+    console.log();
+    console.log(chalk.dim(`    Learn more: ${chalk.underline('https://dotenvx.com')}`));
+    console.log();
+  }
+
+  if (fixActions.gitignoreAdded.length === 0 && unencryptedProjects.length === 0) {
+    console.log(chalk.green('  Nothing to fix — all projects are protected.\n'));
   }
 }
 
