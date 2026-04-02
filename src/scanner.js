@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execSync } from 'node:child_process';
 
 const ENV_PATTERNS = [
@@ -12,6 +13,28 @@ const IGNORE_DIRS = new Set([
   'target', 'coverage', '.terraform', '.cache',
 ]);
 
+// Extra dirs to skip when scanning home or system-wide
+const IGNORE_DIRS_BROAD = new Set([
+  ...IGNORE_DIRS,
+  // Windows
+  'AppData', 'Application Data', 'Program Files', 'Program Files (x86)',
+  'ProgramData', 'Windows', 'Recovery', '$Recycle.Bin', 'System Volume Information',
+  'Intel', 'PerfLogs', 'MSOCache',
+  // macOS
+  'Library', 'Applications', 'System',
+  // Linux
+  'snap', 'proc', 'sys', 'run', 'boot', 'dev', 'mnt', 'media',
+  // Common non-code dirs
+  'Music', 'Videos', 'Pictures', 'Movies', 'Photos',
+  'Games', 'Steam', 'Epic Games',
+  'OneDrive', 'Google Drive', 'Dropbox',
+  '.local', '.config', '.cache', '.npm', '.nvm', '.yarn',
+  '.rustup', '.cargo', '.gradle', '.m2', '.nuget',
+  '.docker', '.kube', '.minikube', '.vagrant',
+  // Recent items (Windows)
+  'Recent',
+]);
+
 const IGNORE_EXTENSIONS = new Set([
   '.example', '.sample', '.template', '.bak', '.swp',
 ]);
@@ -21,19 +44,40 @@ const IGNORE_EXTENSIONS = new Set([
  */
 export function scanDirectories(roots, opts = {}) {
   const maxDepth = opts.maxDepth ?? 6;
+  const broad = opts.broad ?? false;
   const results = [];
 
   for (const root of roots) {
     const absRoot = path.resolve(root);
     if (!fs.existsSync(absRoot)) continue;
-    walkDir(absRoot, absRoot, 0, maxDepth, results);
+    walkDir(absRoot, absRoot, 0, maxDepth, broad, results);
   }
 
   return groupByProject(results);
 }
 
-function walkDir(dir, root, depth, maxDepth, results) {
+/**
+ * Get the user's home directory as the default scan root
+ */
+export function getAutoRoots() {
+  return [os.homedir()];
+}
+
+/**
+ * Get system drive roots for deep system-wide scanning
+ */
+export function getSystemRoots() {
+  if (process.platform === 'win32') {
+    // Check common drive letters
+    return ['C', 'D', 'E', 'F'].map(d => `${d}:\\`).filter(d => fs.existsSync(d));
+  }
+  return ['/home', '/Users', '/root'].filter(d => fs.existsSync(d));
+}
+
+function walkDir(dir, root, depth, maxDepth, broad, results) {
   if (depth > maxDepth) return;
+
+  const ignoreDirs = broad ? IGNORE_DIRS_BROAD : IGNORE_DIRS;
 
   let entries;
   try {
@@ -46,8 +90,9 @@ function walkDir(dir, root, depth, maxDepth, results) {
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      if (IGNORE_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
-      walkDir(fullPath, root, depth + 1, maxDepth, results);
+      if (ignoreDirs.has(entry.name)) continue;
+      if (!broad && entry.name.startsWith('.')) continue;
+      walkDir(fullPath, root, depth + 1, maxDepth, broad, results);
       continue;
     }
 

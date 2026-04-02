@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { scanDirectories, addGitignoreEntry } from '../src/scanner.js';
+import os from 'node:os';
+import chalk from 'chalk';
+import { scanDirectories, addGitignoreEntry, getAutoRoots, getSystemRoots } from '../src/scanner.js';
 import {
   printScanResults,
   printAuditResults,
@@ -9,6 +11,20 @@ import {
   printDriftResults,
   printFixResults,
 } from '../src/reporter.js';
+
+function resolveRoots(dirs, opts) {
+  if (opts.system) {
+    const roots = getSystemRoots();
+    console.log(chalk.dim(`\n  Scanning system drives: ${roots.join(', ')}\n`));
+    return { roots, scanOpts: { maxDepth: opts.depth ?? 8, broad: true } };
+  }
+  if (!dirs.length) {
+    const roots = getAutoRoots();
+    console.log(chalk.dim(`\n  Scanning home directory: ${roots[0]}\n`));
+    return { roots, scanOpts: { maxDepth: opts.depth ?? 5, broad: true } };
+  }
+  return { roots: dirs, scanOpts: { maxDepth: opts.depth ?? 6 } };
+}
 
 const program = new Command();
 
@@ -20,23 +36,27 @@ program
 program
   .command('scan')
   .description('Find and inventory all .env files across project directories')
-  .argument('[dirs...]', 'Directories to scan (default: current directory)', ['.'])
-  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .argument('[dirs...]', 'Directories to scan (default: home directory)')
+  .option('-d, --depth <n>', 'Max directory depth', parseInt)
+  .option('--system', 'Scan all system drives')
   .option('--json', 'Output as JSON')
   .action((dirs, opts) => {
-    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const { roots, scanOpts } = resolveRoots(dirs, opts);
+    const projects = scanDirectories(roots, scanOpts);
     printScanResults(projects, opts);
   });
 
 program
   .command('audit')
   .description('Security audit — find plaintext secrets, missing .gitignore, exposed keys')
-  .argument('[dirs...]', 'Directories to scan', ['.'])
-  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .argument('[dirs...]', 'Directories to scan (default: home directory)')
+  .option('-d, --depth <n>', 'Max directory depth', parseInt)
+  .option('--system', 'Scan all system drives')
   .option('--json', 'Output as JSON (for CI integration)')
   .option('--strict', 'Exit with code 1 on any critical finding')
   .action((dirs, opts) => {
-    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const { roots, scanOpts } = resolveRoots(dirs, opts);
+    const projects = scanDirectories(roots, scanOpts);
     printAuditResults(projects, opts);
 
     if (opts.strict) {
@@ -50,33 +70,39 @@ program
 program
   .command('keys')
   .description('List all key names across projects (values are NEVER shown)')
-  .argument('[dirs...]', 'Directories to scan', ['.'])
-  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .argument('[dirs...]', 'Directories to scan (default: home directory)')
+  .option('-d, --depth <n>', 'Max directory depth', parseInt)
+  .option('--system', 'Scan all system drives')
   .option('--json', 'Output as JSON')
   .action((dirs, opts) => {
-    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const { roots, scanOpts } = resolveRoots(dirs, opts);
+    const projects = scanDirectories(roots, scanOpts);
     printKeysResults(projects, opts);
   });
 
 program
   .command('drift')
   .description('Compare keys across environments — find missing variables')
-  .argument('[dirs...]', 'Directories to scan', ['.'])
-  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .argument('[dirs...]', 'Directories to scan (default: home directory)')
+  .option('-d, --depth <n>', 'Max directory depth', parseInt)
+  .option('--system', 'Scan all system drives')
   .option('--json', 'Output as JSON')
   .action((dirs, opts) => {
-    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const { roots, scanOpts } = resolveRoots(dirs, opts);
+    const projects = scanDirectories(roots, scanOpts);
     printDriftResults(projects, opts);
   });
 
 program
   .command('fix')
   .description('Add missing .gitignore entries and show encryption commands')
-  .argument('[dirs...]', 'Directories to scan', ['.'])
-  .option('-d, --depth <n>', 'Max directory depth', parseInt, 6)
+  .argument('[dirs...]', 'Directories to scan (default: home directory)')
+  .option('-d, --depth <n>', 'Max directory depth', parseInt)
+  .option('--system', 'Scan all system drives')
   .option('--dry-run', 'Show what would be fixed without making changes')
   .action((dirs, opts) => {
-    const projects = scanDirectories(dirs.length ? dirs : ['.'], { maxDepth: opts.depth });
+    const { roots, scanOpts } = resolveRoots(dirs, opts);
+    const projects = scanDirectories(roots, scanOpts);
     const fixActions = { gitignoreAdded: [], alreadyIgnored: [] };
 
     for (const project of projects) {
