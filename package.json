@@ -1,0 +1,26 @@
+{
+  "name": "enview",
+  "version": "0.1.0",
+  "description": "Cross-project .env file scanner, auditor, and drift detector. Know what secrets live where — without exposing them.",
+  "type": "module",
+  "bin": {
+    "enview": "./bin/enview.js"
+  },
+  "scripts": {
+    "start": "node bin/enview.js"
+  },
+  "keywords": [
+    "dotenv", "env", "secrets", "security", "audit", "cli",
+    "dotenvx", "sops", "encryption", "ai-safety",
+    "environment-variables", "secrets-management", "developer-tools"
+  ],
+  "license": "MIT",
+  "engines": { "node": ">=18.0.0" },
+  "files": ["bin/", "src/", "README.md", "LICENSE"],
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "fast-glob": "^3.3.3"
+  }
+}
